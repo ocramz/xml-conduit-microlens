@@ -1,13 +1,13 @@
 name:                xml-conduit-microlens
 version:             0.1.0.0
--- synopsis:
--- description:
+synopsis:            Lenses and traversals for xml-conduit based on microlens
+description:         This package provides DOM selectors based on lenses, using microlens instead of lens for a smaller dependency footprint
 homepage:            https://github.com/ocramz/xml-conduit-microlens
 license:             BSD3
 license-file:        LICENSE
 author:              Marco Zocca
 maintainer:          ocramz
-copyright:           (c) 2023 Marco Zocca
+copyright:           (c) 2015-2023 Fumiaki Kinoshita, 2023 Marco Zocca
 category:            Web XML
 build-type:          Simple
 extra-source-files:  README.md
@@ -22,7 +22,6 @@ library
   build-depends:       base >= 4.7 && < 5
                      , case-insensitive
                      , containers
-                     , data-default-class >= 0.1
                      , microlens
                      , microlens-ghc
                      , text

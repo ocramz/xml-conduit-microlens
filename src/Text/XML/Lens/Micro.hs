@@ -4,45 +4,47 @@
 {-# language OverloadedStrings #-}
 {-# language RecordWildCards #-}
 {-# language Rank2Types #-}
-{-# options_ghc -Wno-unused-imports #-}
+-- {-# options_ghc -Wno-unused-imports #-}
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Text.XML.Lens.Micro
+-- Copyright   :  (c) 2015-2023 Fumiaki Kinoshita, 2023 Marco Zocca
+-- License     :  BSD-style
+--
+-- Maintainer  :  ocramz
+-- Stability   :  experimental
+-- Portability :  portable
+--
+--
+-----------------------------------------------------------------------------
 module Text.XML.Lens.Micro (
   root,
   epilogue,
   named,
   nodes,
+  subtree,
   -- ** node attribute combinators
   attrs,
   attributeSatisfies,
   attributeIs,
   withoutAttribute,
-  -- * prisms
-  -- previewP,
-  -- _Element,
-  -- _Content,
-  -- Prism',
-  -- ** no-prism
-  -- nodeElement,
-  -- nodeContent
                            ) where
 
-import Control.Exception (SomeException)
+
 import Data.Maybe (isNothing)
-import Data.Monoid (First(..))
+import Data.Monoid (First(..), Any(..))
 
 -- case-insensitive
 import qualified Data.CaseInsensitive as CI
 -- containers
-import Data.Map (Map, fromList)
--- data-default
-import Data.Default.Class (Default(..))
+import qualified Data.Map as M (Map, foldrWithKey)
 -- microlens
-import Lens.Micro.GHC (Getting, Lens', (^.), (^..), SimpleFold, Traversal, Traversal', ix, filtered)
+import Lens.Micro.GHC (to, Getting, Lens', Traversal', ix, filtered)
 import Lens.Micro.Extras (preview)
 -- text
 import Data.Text (Text)
-import qualified Data.Text.Lazy as TL (Text)
 -- xml-conduit
-import Text.XML (parseText, Prologue(..), Doctype(..), Document(..), Element(..), Name(..), Node(..), Miscellaneous(..))
+import Text.XML (Document(..), Element(..), Name(..), Node(..), Miscellaneous(..))
 
 
 
@@ -69,7 +71,7 @@ nodes f e = fmap (\x -> e { elementNodes = x }) $ f $ elementNodes e
 {-# INLINE nodes #-}
 
 -- | Node attributes
-attrs :: Lens' Element (Map Name Text)
+attrs :: Lens' Element (M.Map Name Text)
 attrs f e = fmap (\x -> e { elementAttributes = x }) $ f $ elementAttributes e
 {-# INLINE attrs #-}
 
@@ -83,6 +85,13 @@ attributeSatisfies' :: Name -> (Maybe Text -> Bool) -> Traversal' Element Elemen
 attributeSatisfies' n p = filtered (p . preview (attrs . ix n))
 {-# INLINE attributeSatisfies' #-}
 
+-- nodesSatisfy :: ([Node] -> Bool) -> Traversal' Element Element
+-- nodesSatisfy p = nodesSatisfy' (maybe False p)
+
+-- nodesSatisfy' :: (Maybe [Node] -> Bool) -> Traversal' Element Element
+-- nodesSatisfy' p = filtered (p . preview (nodes))
+
+
 withoutAttribute :: Name -> Traversal' Element Element
 withoutAttribute n = attributeSatisfies' n isNothing
 {-# INLINE withoutAttribute #-}
@@ -94,7 +103,21 @@ attributeIs n v = attributeSatisfies n (==v)
 {-# INLINE attributeIs #-}
 
 
+-- | Isolate a DOM subtree that satisfies the given predicates
+subtree :: (Text -> Bool) -- ^ predicate on element name
+        -> (Text -> Text -> Bool) -- ^ predicate on attribute name, value
+        -> Getting r Element (Maybe Element)
+subtree f h = to (_subtree f h)
 
+_subtree :: (Text -> Bool)
+         -> (Text -> Text -> Bool) -> Element -> Maybe Element
+_subtree f h el@(Element n ats nds) = case f (nameLocalName n) && (getAny $ M.foldrWithKey (\k v acc -> Any (h (nameLocalName k) v) <> acc) mempty ats) of
+  True -> Just el
+  False -> getFirst $ foldMap (First . g) nds
+  where
+    g = \case
+      NodeElement e -> _subtree f h e
+      _ -> Nothing
 
 
 
@@ -102,12 +125,12 @@ attributeIs n v = attributeSatisfies n (==v)
 
 
 -- t0 :: TL.Text
--- t0 = "<!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>"
+-- t0 = "<!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p><div id=\'z42\'></div></body></html>"
 -- t0e :: Either SomeException Document
 -- t0e = parseText def t0
 
--- doc :: Document
--- doc = Document {documentPrologue = Prologue {prologueBefore = [], prologueDoctype = Just (Doctype {doctypeName = "html", doctypeID = Nothing}), prologueAfter = []}, documentRoot = Element {elementName = Name {nameLocalName = "html", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "head", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "title", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = fromList [], elementNodes = [NodeContent "Page Title"]})]}),NodeElement (Element {elementName = Name {nameLocalName = "body", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "h1", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = fromList [], elementNodes = [NodeContent "My First Heading"]}),NodeElement (Element {elementName = Name {nameLocalName = "p", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = fromList [], elementNodes = [NodeContent "My first paragraph."]})]})]}, documentEpilogue = []}
+-- dok :: Document
+-- dok = Document {documentPrologue = Prologue {prologueBefore = [], prologueDoctype = Just (Doctype {doctypeName = "html", doctypeID = Nothing}), prologueAfter = []}, documentRoot = Element {elementName = Name {nameLocalName = "html", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "head", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "title", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeContent "Page Title"]})]}),NodeElement (Element {elementName = Name {nameLocalName = "body", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "h1", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeContent "My First Heading"]}),NodeElement (Element {elementName = Name {nameLocalName = "p", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeContent "My first paragraph."]}),NodeElement (Element {elementName = Name {nameLocalName = "div", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [(Name {nameLocalName = "id", nameNamespace = Nothing, namePrefix = Nothing},"z42")], elementNodes = []})]})]}, documentEpilogue = []}
 
 
 
