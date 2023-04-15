@@ -1,22 +1,38 @@
+{-# LANGUAGE LambdaCase #-}
 {-# language ExistentialQuantification #-}
 {-# language RecordWildCards #-}
 {-# language Rank2Types #-}
 {-# options_ghc -Wno-unused-imports #-}
-module Text.XML.Lens.Micro where
+module Text.XML.Lens.Micro (
+  -- * Traversals
+  named,
+  nodes,
+  -- ** node attribute combinators
+  attrs,
+  attributeSatisfies,
+  attributeIs,
+  withoutAttribute,
+  -- * prisms
+  previewP,
+  _Element,
+  _Content,
+  Prism'
+                           ) where
 
 import Data.Maybe (isNothing)
+import Data.Monoid (First(..))
 
 -- case-insensitive
 import qualified Data.CaseInsensitive as CI
 -- containers
 import Data.Map (Map)
 -- microlens
-import Lens.Micro.GHC (Lens', Traversal', ix, filtered)
+import Lens.Micro.GHC (Getting, Lens', Traversal', ix, filtered)
 import Lens.Micro.Extras (preview)
 -- text
 import Data.Text (Text)
 -- xml-conduit
-import Text.XML (Element(..), nameLocalName, Name(..), Node(..))
+import Text.XML (Element(..), Name(..), Node(..))
 
 -- | Traverse elements which has the specified *local* name (case-insensitive).
 named :: CI.CI Text -> Traversal' Element Element
@@ -25,16 +41,19 @@ named n f s
     | otherwise = pure s
 {-# INLINE named #-}
 
+-- | All 'Node's of an 'Element'
 nodes :: Lens' Element [Node]
 nodes f e = fmap (\x -> e { elementNodes = x }) $ f $ elementNodes e
 {-# INLINE nodes #-}
 
-
+-- | Node attributes
 attrs :: Lens' Element (Map Name Text)
 attrs f e = fmap (\x -> e { elementAttributes = x }) $ f $ elementAttributes e
 {-# INLINE attrs #-}
 
-attributeSatisfies :: Name -> (Text -> Bool) -> Traversal' Element Element
+attributeSatisfies :: Name -- ^ attribute name
+                   -> (Text -> Bool) -- ^ predicate on the value of the attribute
+                   -> Traversal' Element Element
 attributeSatisfies n p = attributeSatisfies' n (maybe False p)
 {-# INLINE attributeSatisfies #-}
 
@@ -46,7 +65,9 @@ withoutAttribute :: Name -> Traversal' Element Element
 withoutAttribute n = attributeSatisfies' n isNothing
 {-# INLINE withoutAttribute #-}
 
-attributeIs :: Name -> Text -> Traversal' Element Element
+attributeIs :: Name -- ^ attribute name
+            -> Text -- ^ value of the attribute
+            -> Traversal' Element Element
 attributeIs n v = attributeSatisfies n (==v)
 {-# INLINE attributeIs #-}
 
@@ -57,22 +78,33 @@ data Prism' s a = forall q. Prism'
     , inject :: Either a q -> s
     }
 
--- preview :: Prism' s a -> (s -> Maybe a)
--- preview Prism'{..} x = case match x of
---     Left  y -> Just y
---     Right _ -> Nothing
+-- | Focus on node elements
+_Element :: Prism' Node Element
+_Element = Prism' {
+  match = \case
+      NodeElement e -> Left e
+      i -> Right i
+  , inject = \case
+      Left e -> NodeElement e
+      Right i -> i
+                  }
 
-{- prisms for sum types
+-- | Focus on the text content of nodes
+_Content :: Prism' Node Text
+_Content = Prism' {
+  match = \case
+      NodeContent c -> Left c
+      i -> Right i
+  , inject = \case
+      Left c -> NodeContent c
+      Right i -> i
+                  }
 
-data Shape = Circle  Double           -- radius
-           | RegPoly Natural Double   -- number of sides, length of sides
 
-_Circle :: Prism' Shape Double
-_Circle = Prism'
-    { match  = \case
-        Circle  r    -> Left r
-        RegPoly n s  -> Right (n, s)
-    , inject = \case
-        Left   r     -> Circle r
-        Right (n, s) -> RegPoly n s
--}
+
+-- | 'preview' for 'Prism''
+previewP :: Prism' s a -> (s -> Maybe a)
+previewP Prism'{..} x = case match x of
+    Left  y -> Just y
+    Right _ -> Nothing
+
