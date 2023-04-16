@@ -1,7 +1,14 @@
 name:                xml-conduit-microlens
 version:             0.3.0.0
 synopsis:            Lenses and traversals for xml-conduit based on microlens
-description:         This package provides DOM selectors based on lenses, using microlens instead of lens for a smaller dependency footprint
+description:         XML (and HTML) DOM selectors for `xml-conduit` based on `microlens`.
+                     .
+                     This library provides combinators for traversing and folding over XML trees.
+                     It could be useful for editing trees, adding attributes selectively (e.g. refactoring CSS,
+                     adding HTMX attributes etc.)
+                     .
+                     Some definitions are taken from 'xml-lens' but we import 'microlens' to achieve
+                     a smaller dependency footprint.
 homepage:            https://github.com/ocramz/xml-conduit-microlens
 license:             BSD3
 license-file:        LICENSE
