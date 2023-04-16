@@ -15,20 +15,28 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
+-- XML (and HTML) DOM selectors for `xml-conduit` based on `microlens`.
 --
+-- This library provides combinators for traversing and folding over XML trees.
+-- It could be useful for editing trees, adding attributes selectively (e.g. refactoring CSS,
+-- adding HTMX attributes etc.)
+--
+-- Some definitions are taken from 'xml-lens' but we import 'microlens' to achieve
+-- a smaller dependency footprint.
 -----------------------------------------------------------------------------
 module Text.XML.Lens.Micro (
+  subtree,
+  remapAttributes,
+  -- * From 'xml-lens'
   root,
   epilogue,
   named,
   nodes,
-  subtree,
-  -- ** node attribute combinators
   attrs,
   attributeSatisfies,
   attributeIs,
   withoutAttribute,
-  remapAttributes,
+
                            ) where
 
 
@@ -50,11 +58,17 @@ import Text.XML (Prologue(..), Doctype(..), Document(..), Element(..), Name(..),
 
 
 
--- | The root element of the document.
+-- | The root element of the 'Document'.
 root :: Lens' Document Element
 root f doc = fmap (\p -> doc { documentRoot = p} ) $ f $ documentRoot doc
 {-# INLINE root #-}
 
+-- | 'Prologue' of the 'Document'
+prologue :: Lens' Document Prologue
+prologue f doc = fmap (\p -> doc { documentPrologue = p} ) $ f $ documentPrologue doc
+{-# INLINE prologue #-}
+
+-- | Epilogue, i.e. the last elements, of the 'Document'
 epilogue :: Lens' Document [Miscellaneous]
 epilogue f doc = fmap (\p -> doc { documentEpilogue = p} ) $ f $ documentEpilogue doc
 {-# INLINE epilogue #-}
@@ -76,6 +90,7 @@ attrs :: Lens' Element (M.Map Name Text)
 attrs f e = fmap (\x -> e { elementAttributes = x }) $ f $ elementAttributes e
 {-# INLINE attrs #-}
 
+-- | Traverse over only the elements such that the value of the given attribute satisfy a predicate
 attributeSatisfies :: Name -- ^ attribute name
                    -> (Text -> Bool) -- ^ predicate on the value of the attribute
                    -> Traversal' Element Element
@@ -97,10 +112,11 @@ withoutAttribute :: Name -> Traversal' Element Element
 withoutAttribute n = attributeSatisfies' n isNothing
 {-# INLINE withoutAttribute #-}
 
+-- | Traverse over only the elements with a given attribute name and value
 attributeIs :: Name -- ^ attribute name
             -> Text -- ^ value of the attribute
             -> Traversal' Element Element
-attributeIs n v = attributeSatisfies n (==v)
+attributeIs n v = attributeSatisfies n (== v)
 {-# INLINE attributeIs #-}
 
 
@@ -120,7 +136,7 @@ _subtree f h el@(Element n ats nds) = case f (nameLocalName n) && (getAny $ M.fo
       NodeElement e -> _subtree f h e
       _ -> Nothing
 
--- | Remap all attributes. Handy for editing HREF or SRC targets etc.
+-- | Remap all attributes. Handy for editing HREF or SRC targets, adding HTMX attributes to certain elements only, etc.
 --
 -- If the callback returns Nothing, the element attributes are left unchanged
 remapAttributes ::
