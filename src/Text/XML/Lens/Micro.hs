@@ -29,6 +29,7 @@ module Text.XML.Lens.Micro (
   remapAttributes,
   -- * From 'xml-lens'
   root,
+  prologue,
   epilogue,
   named,
   nodes,
