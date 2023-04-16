@@ -32,13 +32,13 @@ module Text.XML.Lens.Micro (
                            ) where
 
 
-import Data.Maybe (isNothing)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Monoid (First(..), Any(..))
 
 -- case-insensitive
 import qualified Data.CaseInsensitive as CI
 -- containers
-import qualified Data.Map as M (Map, singleton, fromList, foldrWithKey)
+import qualified Data.Map as M (Map, insert, lookup, singleton, fromList, foldrWithKey)
 -- microlens
 import Lens.Micro.GHC (to, Getting, Lens', (^.), Traversal', ix, filtered)
 import Lens.Micro.Extras (preview)
@@ -120,23 +120,24 @@ _subtree f h el@(Element n ats nds) = case f (nameLocalName n) && (getAny $ M.fo
       NodeElement e -> _subtree f h e
       _ -> Nothing
 
-
--- | Handy for editing HREF targets etc.
-remapAttributes :: (Name -> Text -> Maybe (Name, Text)) -- ^ operate on element attribute (name, value)
-                -> Getting r Element Element
+-- | Remap all attributes. Handy for editing HREF or SRC targets etc.
+--
+-- If the callback returns Nothing, the element attributes are left unchanged
+remapAttributes ::
+  (Name -> M.Map Name Text -> Maybe (M.Map Name Text)) -- ^ element name, element attributes
+  -> Getting r Element Element
 remapAttributes f = to (_remapAttributes f)
 
-_remapAttributes :: (Name -> Text -> Maybe (Name, Text))
-               -> Element -> Element
-_remapAttributes p el@(Element _ ats _) =
-  el{ elementAttributes = M.foldrWithKey (\k v acc -> case p k v of
-                                             Nothing -> M.singleton k v <> acc
-                                             Just (k', v') -> M.singleton k' v' <> acc
-                                         ) mempty ats,
+_remapAttributes :: (Name -> M.Map Name Text -> Maybe (M.Map Name Text))
+                     -> Element -> Element
+_remapAttributes f el@(Element n ats _) =
+  el{ elementAttributes = fromMaybe ats (f n ats),
       elementNodes = map (\nn -> case nn of
-                             NodeElement e -> NodeElement (_remapAttributes p e)
+                             NodeElement e -> NodeElement (_remapAttributes f e)
                              x -> x
                          ) $ elementNodes el }
+
+
 
 
 
