@@ -121,7 +121,7 @@ attributeIs n v = attributeSatisfies n (== v)
 {-# INLINE attributeIs #-}
 
 
--- | Isolate a DOM subtree that satisfies the given predicates
+-- | Extract a DOM subtree whose root element satisfies the given predicates
 subtree :: (Text -> Bool) -- ^ predicate on element name
         -> (Text -> Text -> Bool) -- ^ predicate on attribute name, value
         -> Getting r Element (Maybe Element)
