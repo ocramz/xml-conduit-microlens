@@ -1,5 +1,5 @@
 name:                xml-conduit-microlens
-version:             0.3.0.0
+version:             0.4.0.0
 synopsis:            Lenses and traversals for xml-conduit based on microlens
 description:         XML (and HTML) DOM selectors for `xml-conduit` based on `microlens`.
                      .

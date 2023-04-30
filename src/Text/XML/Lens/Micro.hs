@@ -42,19 +42,22 @@ module Text.XML.Lens.Micro (
 
 
 import Data.Maybe (fromMaybe, isNothing)
-import Data.Monoid (First(..), Any(..))
+import Data.Monoid (First(..), Any(..), Ap(..))
+import GHC.Exception (SomeException(..))
 
 -- case-insensitive
 import qualified Data.CaseInsensitive as CI
 -- containers
 import qualified Data.Map as M (Map, insert, lookup, singleton, fromList, foldrWithKey)
 -- microlens
-import Lens.Micro.GHC (to, Getting, Lens', (^.), Traversal', ix, filtered)
+import Lens.Micro.GHC (to, (&), Getting, Lens, Lens', lens, (^.), (^..), (.~), Traversal', ix, mapped, traversed, filtered, _Just)
 import Lens.Micro.Extras (preview)
 -- text
 import Data.Text (Text)
+import qualified Data.Text.Lazy as TL (Text)
+import qualified Data.Text.Lazy.IO as TL (putStrLn)
 -- xml-conduit
-import Text.XML (Prologue(..), Doctype(..), Document(..), Element(..), Name(..), Node(..), Miscellaneous(..))
+import Text.XML (def, Prologue(..), Doctype(..), Document(..), Element(..), Name(..), Node(..), Miscellaneous(..), ParseSettings, RenderSettings, parseText, renderText)
 
 
 
@@ -137,6 +140,16 @@ _subtree f h el@(Element n ats nds) = case f (nameLocalName n) && (getAny $ M.fo
       NodeElement e -> _subtree f h e
       _ -> Nothing
 
+-- _subtree2 f h el@(Element n ats nds) =
+--   case f (nameLocalName n) && (getAny $ M.foldrWithKey (\k v acc -> Any (h (nameLocalName k) v) <> acc) mempty ats) of
+--     -- True -> pure el
+--     False -> foldMap g nds
+--       where
+--         g = \case
+--           NodeElement e -> _subtree2 f h e
+--           _ -> mempty
+
+
 -- | Remap all attributes. Handy for editing HREF or SRC targets, adding HTMX attributes to certain elements only, etc.
 --
 -- If the callback returns Nothing, the element attributes are left unchanged
@@ -155,13 +168,87 @@ _remapAttributes f el@(Element n ats _) =
                          ) $ elementNodes el }
 
 
+-- -- * A lens for focusing on a given subtree
+
+-- lensSubtree :: (Text -> M.Map Name Text -> Bool) -- ^ predicate on element name and element attributes
+--             -> Lens' Element (Maybe Element)
+-- lensSubtree f = lens' lget lset
+--   where
+--     lget el@(Element nam ats nds) =
+--       if f (nameLocalName nam) ats
+--       then Just el
+--       else Nothing -- FIXME this only looks at the top level
+--     lset el@(Element nam ats _) elm' =
+--       if f (nameLocalName nam) ats
+--       then
+--         case elm' of
+--           Just el' -> el'
+--           Nothing -> el
+--       else el
+
+lens' :: (s -> a) -> (s -> a -> s) -> Lens' s a
+lens' = lens
+
+-- -- new attempt at lensSubtree : 
+
+-- firstNode :: (Name -> M.Map Name Text -> Bool) -> Lens' Element (Maybe Element)
+-- firstNode f = lens' (fnGet f) (fnSet f)
+
+
+-- fnSet :: (Name -> M.Map Name Text -> Bool)
+--       -> Element -> Maybe Element -> Element
+-- fnSet f e elm' = go e
+--   where
+--     g :: Node -> Node
+--     g = \case
+--       NodeElement eBelow -> NodeElement $ go eBelow
+--       x -> x
+--     go (Element nam ats nds) = if f nam ats
+--                              then case elm' of
+--                                     Just e' -> e'
+--                                     Nothing -> e
+--                              else e{ elementNodes = map g nds }
+
+-- fnGet :: (Name -> M.Map Name Text -> Bool)
+--              -> Element -> Maybe Element
+-- fnGet f = getFirst . go
+--   where
+--     go el = foldMap g $ elementNodes el
+--     g = \case
+--       NodeElement e@(Element nam ats _ ) ->
+--         if f nam ats
+--         then First $ Just e
+--         else go e
+--       _ -> mempty
 
 
 
 -- t0 :: TL.Text
 -- t0 = "<!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p><div id=\'z42\'></div></body></html>"
--- t0e :: Either SomeException Document
--- t0e = parseText def t0
+-- -- --t0e :: Either SomeException Document
+-- -- t0e = parseText def t0
+
+-- -- testSet :: Document
+-- testSet = case parseText def t0 of
+--   Right d ->
+--     let
+--       d1 = d & root . firstNode (\n ats -> n == "div" && any (== "z42") ats) .~ Nothing
+--       d2 = d & root . firstNode (\n ats -> n == "div" && any (== "z42") ats) .~ Just (Element "moo" mempty mempty)
+--     in
+--       do
+--         TL.putStrLn $ renderText def d
+--         TL.putStrLn $ renderText def d1
+--         TL.putStrLn $ renderText def d2
+
+-- testGet :: [Maybe Element]
+-- testGet = case parseText def t0 of
+--   Right dok -> dok ^.. root . firstNode (\n ats -> n == "div" && any (== "z42") ats)
+
+
+-- defParseSettings :: ParseSettings
+-- defParseSettings = def
+-- defRenderSettings :: RenderSettings
+-- defRenderSettings = def
 
 -- dok :: Document
 -- dok = Document {documentPrologue = Prologue {prologueBefore = [], prologueDoctype = Just (Doctype {doctypeName = "html", doctypeID = Nothing}), prologueAfter = []}, documentRoot = Element {elementName = Name {nameLocalName = "html", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "head", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "title", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeContent "Page Title"]})]}),NodeElement (Element {elementName = Name {nameLocalName = "body", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeElement (Element {elementName = Name {nameLocalName = "h1", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeContent "My First Heading"]}),NodeElement (Element {elementName = Name {nameLocalName = "p", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [], elementNodes = [NodeContent "My first paragraph."]}),NodeElement (Element {elementName = Name {nameLocalName = "div", nameNamespace = Nothing, namePrefix = Nothing}, elementAttributes = M.fromList [(Name {nameLocalName = "id", nameNamespace = Nothing, namePrefix = Nothing},"z42")], elementNodes = []})]})]}, documentEpilogue = []}
